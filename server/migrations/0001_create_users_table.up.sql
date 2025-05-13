@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    account_type VARCHAR(50) DEFAULT 'user',
+    reated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)

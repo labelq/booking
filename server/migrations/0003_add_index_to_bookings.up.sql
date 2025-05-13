@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_parking_spot ON bookings(parking_spot);
