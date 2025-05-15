@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Header from "./pages/Header.jsx";
 import Footer from "./pages/Footer.jsx";
+import Admin from './pages/Admin';
 
 function App() {
     return (
@@ -17,6 +18,7 @@ function App() {
                 <Route path="/booking" element={<Booking />} />
                 <Route path="/login" element={<Login    />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/admin" element={<Admin />} />
             </Routes>
             <Footer />
         </Router>

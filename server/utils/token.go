@@ -5,6 +5,9 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"golang.org/x/crypto/bcrypt"
 	"time"
+	"errors"
+    "net/http"
+    "strings"
 )
 
 var secretKey = []byte("your-secret-key") // Этот ключ можно хранить в env-файле
@@ -19,13 +22,14 @@ func CheckPassword(inputPassword, storedPassword string) bool {
 	return err == nil
 }
 
-func GenerateToken(userID int) (string, error) {
-	claims := jwt.MapClaims{
-		"sub": userID,
-		"exp": time.Now().Add(time.Hour * 72).Unix(), // Токен действителен 72 часа
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(secretKey)
+func GenerateToken(userID int, accountType string) (string, error) {
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+        "sub": userID,
+        "account_type": accountType,
+        "exp": time.Now().Add(time.Hour * 24).Unix(),
+    })
+
+    return token.SignedString([]byte(secretKey))
 }
 
 func ParseToken(tokenString string) (jwt.MapClaims, error) {
@@ -47,3 +51,23 @@ func ParseToken(tokenString string) (jwt.MapClaims, error) {
 	return claims, nil
 }
 
+func GetAndValidateTokenClaims(r *http.Request) (map[string]interface{}, error) {
+    // Получаем токен из заголовка
+    tokenString := r.Header.Get("Authorization")
+    if tokenString == "" {
+        return nil, errors.New("no token provided")
+    }
+
+    // Убираем префикс "Bearer "
+    if len(tokenString) > 7 && strings.HasPrefix(tokenString, "Bearer ") {
+        tokenString = tokenString[7:]
+    }
+
+    // Парсим и проверяем токен
+    claims, err := ParseToken(tokenString)
+    if err != nil {
+        return nil, err
+    }
+
+    return claims, nil
+}

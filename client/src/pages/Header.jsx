@@ -1,29 +1,50 @@
 import '../App.css'
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from 'react';
+import { jwtDecode } from "jwt-decode"; // Изменен импорт - добавлены фигурные скобки
 
 function Header() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [user, setUser] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         const checkAuth = () => {
-            const token = localStorage.getItem('authToken');
-            const userStr = localStorage.getItem('user');
-            console.log('Checking auth - Token:', token);
-            console.log('Checking auth - User:', userStr);
+            try {
+                const token = localStorage.getItem('authToken');
+                const userStr = localStorage.getItem('user');
 
-            setIsAuthenticated(!!token);
-            if (userStr) {
-                setUser(JSON.parse(userStr));
+                console.log('Token:', token); // Добавляем логи
+
+                if (token) {
+                    const decoded = jwtDecode(token);
+                    console.log('Decoded token:', decoded); // Добавляем логи
+                    console.log('Account type:', decoded.account_type); // Добавляем логи
+
+                    setIsAuthenticated(true);
+                    setIsAdmin(decoded.account_type === 'admin');
+
+                    console.log('Is admin?:', decoded.account_type === 'admin'); // Добавляем логи
+                } else {
+                    setIsAuthenticated(false);
+                    setIsAdmin(false);
+                }
+
+                if (userStr) {
+                    setUser(JSON.parse(userStr));
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                setIsAuthenticated(false);
+                setIsAdmin(false);
+                setUser(null);
             }
         };
 
         checkAuth();
 
         const handleAuthChange = () => {
-            console.log('Auth change event received');
             checkAuth();
         };
 
@@ -38,11 +59,11 @@ function Header() {
         localStorage.removeItem('authToken');
         localStorage.removeItem('user');
         setIsAuthenticated(false);
+        setIsAdmin(false);
         setUser(null);
         window.dispatchEvent(new Event('auth-change'));
         navigate('/');
     };
-
 
     return (
         <div>
@@ -84,14 +105,26 @@ function Header() {
                                         </Link>
                                     </li>
                                     {isAuthenticated && (
-                                        <li>
-                                            <Link
-                                                className="text-gray-500 transition hover:text-gray-500/75 dark:text-white dark:hover:text-white/75"
-                                                to="/booking"
-                                            >
-                                                Бронировать
-                                            </Link>
-                                        </li>
+                                        <>
+                                            <li>
+                                                <Link
+                                                    className="text-gray-500 transition hover:text-gray-500/75 dark:text-white dark:hover:text-white/75"
+                                                    to="/booking"
+                                                >
+                                                    Бронировать
+                                                </Link>
+                                            </li>
+                                            {isAdmin && (
+                                                <li>
+                                                    <Link
+                                                        className="text-gray-500 transition hover:text-gray-500/75 dark:text-white dark:hover:text-white/75"
+                                                        to="/admin"
+                                                    >
+                                                        Админ панель
+                                                    </Link>
+                                                </li>
+                                            )}
+                                        </>
                                     )}
                                 </ul>
                             </nav>
@@ -148,7 +181,7 @@ function Header() {
                 </div>
             </header>
         </div>
-    )
+    );
 }
 
 export default Header;

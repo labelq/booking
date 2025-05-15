@@ -1,12 +1,12 @@
 package handlers
 
 import (
-	"database/sql"
-	"encoding/json"
-	"log"
-	"net/http"
-	"server/models"
-	"server/utils"
+    "database/sql"
+    "encoding/json"
+    "log"
+    "net/http"
+    "server/models"
+    "server/utils"
 )
 
 func RegisterHandler(db *sql.DB) http.HandlerFunc {
@@ -24,7 +24,7 @@ func RegisterHandler(db *sql.DB) http.HandlerFunc {
         password := userData.PasswordHash // временно храним пароль
 
         // Хэширование пароля
-        hashedPassword, err := utils.HashPassword(password) // используем исходный пароль
+        hashedPassword, err := utils.HashPassword(password)
         if err != nil {
             log.Printf("Error hashing password: %v", err)
             http.Error(w, "Could not hash password", http.StatusInternalServerError)
@@ -34,31 +34,32 @@ func RegisterHandler(db *sql.DB) http.HandlerFunc {
         userData.PasswordHash = hashedPassword
         userData.AccountType = "user"
 
-		// Создаем пользователя и получаем его ID
-		userID, err := models.CreateUser(db, &userData) // Измените CreateUser, чтобы возвращать ID
-		if err != nil {
-			log.Printf("Error creating user: %v", err)
-			http.Error(w, "Could not create user", http.StatusInternalServerError)
-			return
-		}
+        // Создаем пользователя и получаем его ID
+        userID, err := models.CreateUser(db, &userData)
+        if err != nil {
+            log.Printf("Error creating user: %v", err)
+            http.Error(w, "Could not create user", http.StatusInternalServerError)
+            return
+        }
 
-		// Генерируем токен с правильным ID
-		token, err := utils.GenerateToken(userID)
-		if err != nil {
-			log.Printf("Error generating token: %v", err)
-			http.Error(w, "Could not create token", http.StatusInternalServerError)
-			return
-		}
+        // Генерируем токен с правильным ID и типом аккаунта
+        token, err := utils.GenerateToken(userID, userData.AccountType)
+        if err != nil {
+            log.Printf("Error generating token: %v", err)
+            http.Error(w, "Could not create token", http.StatusInternalServerError)
+            return
+        }
 
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"token": token,
-			"user": map[string]interface{}{
-				"id":    userID,
-				"email": userData.Email,
-			},
-		})
-	}
+        w.WriteHeader(http.StatusCreated)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "token": token,
+            "user": map[string]interface{}{
+                "id":    userID,
+                "email": userData.Email,
+                "account_type": userData.AccountType,
+            },
+        })
+    }
 }
 
 func LoginHandler(db *sql.DB) http.HandlerFunc {
@@ -91,19 +92,21 @@ func LoginHandler(db *sql.DB) http.HandlerFunc {
             return
         }
 
-        token, err := utils.GenerateToken(user.ID)
+        // Генерируем токен с ID и типом аккаунта пользователя
+        token, err := utils.GenerateToken(user.ID, user.AccountType)
         if err != nil {
             log.Printf("Login: error generating token: %v", err)
             http.Error(w, "Could not create token", http.StatusInternalServerError)
             return
         }
 
-        log.Printf("Login successful for user: %s", loginData.Email)
+        log.Printf("Login successful for user: %s with account type: %s", loginData.Email, user.AccountType)
         json.NewEncoder(w).Encode(map[string]interface{}{
             "token": token,
             "user": map[string]interface{}{
                 "id":    user.ID,
                 "email": user.Email,
+                "account_type": user.AccountType,
             },
         })
     }

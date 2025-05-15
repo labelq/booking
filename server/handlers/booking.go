@@ -7,6 +7,8 @@ import (
     "net/http"
     "server/utils"
     "time"
+    "strconv"
+    "github.com/gorilla/mux"
 )
 
 type BookingRequest struct {
@@ -146,5 +148,217 @@ func BookParkingSpot(db *sql.DB) http.HandlerFunc {
             http.Error(w, "Error encoding response", http.StatusInternalServerError)
             return
         }
+    }
+}
+
+func IsParkingSpotAvailable(db *sql.DB, spotNumber int) (bool, error) {
+    // Проверяем, не заблокировано ли место
+    var isBlocked bool
+    err := db.QueryRow(`
+        SELECT is_blocked
+        FROM blocked_spots
+        WHERE spot_number = $1 AND is_blocked = true
+    `, spotNumber).Scan(&isBlocked)
+
+    if err != nil && err != sql.ErrNoRows {
+        return false, err
+    }
+
+    if isBlocked {
+        return false, nil
+    }
+
+    // Проверяем, не занято ли место
+    var count int
+    err = db.QueryRow(`
+        SELECT COUNT(*)
+        FROM bookings
+        WHERE parking_spot = $1
+        AND reserved_at + (hours * interval '1 hour') > NOW()
+    `, spotNumber).Scan(&count)
+
+    if err != nil {
+        return false, err
+    }
+
+    return count == 0, nil
+}
+
+// GetAllBookings возвращает все активные бронирования для админ-панели
+func GetAllBookings(db *sql.DB) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+
+        // Проверяем права администратора
+        claims, err := utils.GetAndValidateTokenClaims(r)
+        if err != nil {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        if !isAdminFromClaims(claims) {
+            http.Error(w, "Forbidden", http.StatusForbidden)
+            return
+        }
+
+        // Получаем все активные бронирования
+        rows, err := db.Query(`
+            SELECT id, parking_spot, car_number, reserved_at, hours
+            FROM bookings
+            WHERE status = 'active'
+            ORDER BY reserved_at DESC
+        `)
+        if err != nil {
+            log.Printf("Database query error: %v", err)
+            http.Error(w, "Internal server error", http.StatusInternalServerError)
+            return
+        }
+        defer rows.Close()
+
+        var bookings []map[string]interface{}
+        for rows.Next() {
+            var id, parkingSpot, hours int
+            var carNumber string
+            var reservedAt time.Time
+
+            if err := rows.Scan(&id, &parkingSpot, &carNumber, &reservedAt, &hours); err != nil {
+                log.Printf("Row scan error: %v", err)
+                continue
+            }
+
+            bookings = append(bookings, map[string]interface{}{
+                "id": id,
+                "parking_spot": parkingSpot,
+                "car_number": carNumber,
+                "reserved_at": reservedAt,
+                "hours": hours,
+            })
+        }
+
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "bookings": bookings,
+        })
+    }
+}
+
+// CancelBooking отменяет бронирование по ID
+func CancelBooking(db *sql.DB) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+
+        // Проверяем права администратора
+        claims, err := utils.GetAndValidateTokenClaims(r)
+        if err != nil {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        if !isAdminFromClaims(claims) {
+            http.Error(w, "Forbidden", http.StatusForbidden)
+            return
+        }
+
+        // Получаем ID бронирования из URL
+        vars := mux.Vars(r)
+        bookingID, err := strconv.Atoi(vars["id"])
+        if err != nil {
+            http.Error(w, "Invalid booking ID", http.StatusBadRequest)
+            return
+        }
+
+        // Отменяем бронирование
+        result, err := db.Exec(`
+            UPDATE bookings
+            SET status = 'cancelled'
+            WHERE id = $1 AND status = 'active'
+        `, bookingID)
+
+        if err != nil {
+            log.Printf("Database update error: %v", err)
+            http.Error(w, "Internal server error", http.StatusInternalServerError)
+            return
+        }
+
+        rowsAffected, _ := result.RowsAffected()
+        if rowsAffected == 0 {
+            http.Error(w, "Booking not found or already cancelled", http.StatusNotFound)
+            return
+        }
+
+        json.NewEncoder(w).Encode(map[string]string{
+            "message": "Booking cancelled successfully",
+        })
+    }
+}
+
+// ToggleSpotBlock блокирует или разблокирует парковочное место
+func ToggleSpotBlock(db *sql.DB) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+
+        // Проверяем права администратора
+        claims, err := utils.GetAndValidateTokenClaims(r)
+        if err != nil {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        if !isAdminFromClaims(claims) {
+            http.Error(w, "Forbidden", http.StatusForbidden)
+            return
+        }
+
+        // Получаем номер места из тела запроса
+        var req struct {
+            SpotNumber int `json:"spotNumber"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+            http.Error(w, "Invalid request body", http.StatusBadRequest)
+            return
+        }
+
+        // Проверяем существование записи для данного места
+        var exists bool
+        var isCurrentlyBlocked bool
+        err = db.QueryRow(`
+            SELECT EXISTS(
+                SELECT 1 FROM blocked_spots WHERE spot_number = $1
+            ),
+            COALESCE(
+                (SELECT is_blocked FROM blocked_spots WHERE spot_number = $1),
+                false
+            )
+        `, req.SpotNumber).Scan(&exists, &isCurrentlyBlocked)
+
+        if err != nil {
+            log.Printf("Database query error: %v", err)
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
+
+        // Выполняем блокировку/разблокировку
+        if exists {
+            _, err = db.Exec(`
+                UPDATE blocked_spots
+                SET is_blocked = NOT is_blocked,
+                    blocked_at = CURRENT_TIMESTAMP
+                WHERE spot_number = $1
+            `, req.SpotNumber)
+        } else {
+            _, err = db.Exec(`
+                INSERT INTO blocked_spots (spot_number, is_blocked, blocked_at)
+                VALUES ($1, true, CURRENT_TIMESTAMP)
+            `, req.SpotNumber)
+        }
+
+        if err != nil {
+            log.Printf("Database update error: %v", err)
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
+
+        json.NewEncoder(w).Encode(map[string]string{
+            "message": "Parking spot status updated successfully",
+        })
     }
 }
