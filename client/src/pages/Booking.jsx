@@ -2,38 +2,90 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate } from 'react-router-dom';
 
-
-
 function Booking() {
-    const [carNumber, setCarNumber] = useState(""); // Номер машины
-    const [hours, setHours] = useState(1); // Количество часов
-    const [totalPrice, setTotalPrice] = useState(100); // Стоимость
-    const [parkingSpot, setParkingSpot] = useState(null); // Номер выбранного места
+    const [carNumber, setCarNumber] = useState("");
+    const [hours, setHours] = useState(1);
+    const [totalPrice, setTotalPrice] = useState(100);
+    const [parkingSpot, setParkingSpot] = useState("");
+    const [message, setMessage] = useState("");
+    const [occupiedSpots, setOccupiedSpots] = useState([]);
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
         const token = localStorage.getItem('authToken');
         if (!token) {
-            navigate('/login'); // Перенаправляем на страницу входа, если нет токена
-        }
-    }, [navigate]);
-
-    // Обработчик изменения количества часов
-    const handleHoursChange = (e) => {
-        const hours = e.target.value;
-        setHours(hours);
-        setTotalPrice(hours * 100); // 100р за каждый час
-    };
-
-    // Обработчик отправки формы
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (!parkingSpot) {
-            alert("Пожалуйста, выберите место для парковки.");
+            navigate('/login');
             return;
         }
-        // Логика для обработки бронирования
-        alert(`Вы успешно забронировали место №${parkingSpot} на ${hours} час(ов) за ${totalPrice} рублей.`);
+        fetchOccupiedSpots();
+    }, [navigate]);
+
+    const fetchOccupiedSpots = async () => {
+        try {
+            const response = await fetch('http://localhost:8080/api/bookings', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setOccupiedSpots(data.occupiedSpots || []);
+            }
+        } catch (error) {
+            console.error('Error fetching occupied spots:', error);
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setMessage("");
+
+        if (!parkingSpot || !carNumber) {
+            setMessage("Пожалуйста, заполните все поля");
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const response = await fetch('http://localhost:8080/api/booking', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                },
+                body: JSON.stringify({
+                    parkingSpot: parseInt(parkingSpot),
+                    carNumber,
+                    hours: parseInt(hours)
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                const endTime = new Date(data.endTime);
+                setMessage(`
+                    Бронирование успешно!
+                    Место: ${parkingSpot}
+                    Время окончания: ${endTime.toLocaleString()}
+                    Номер машины: ${carNumber}
+                `);
+                await fetchOccupiedSpots();
+                setCarNumber("");
+                setParkingSpot("");
+                setHours(1);
+                setTotalPrice(100);
+            } else {
+                setMessage(data.message || "Ошибка при бронировании");
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            setMessage("Произошла ошибка при бронировании");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -43,11 +95,18 @@ function Booking() {
             {/* Фото парковки */}
             <div className="mb-8">
                 <img
-                    src="/0DBFF439-B104-40AD-B43F-22FD452EE2AB.JPEG" // Путь к изображению парковки
+                    src="/0DBFF439-B104-40AD-B43F-22FD452EE2AB.JPEG"
                     alt="Парковка"
                     className="w-full max-w-lg rounded-lg shadow-lg"
                 />
             </div>
+
+            {/* Сообщение об успехе/ошибке */}
+            {message && (
+                <div className={`mb-4 p-4 rounded-lg ${message.includes('успешно') ? 'bg-green-600' : 'bg-red-600'}`}>
+                    <pre className="whitespace-pre-line">{message}</pre>
+                </div>
+            )}
 
             {/* Форма бронирования */}
             <form onSubmit={handleSubmit} className="w-full max-w-sm">
@@ -58,7 +117,7 @@ function Booking() {
                         value={carNumber}
                         id="carNumber"
                         placeholder=" "
-                        className="peer w-full px-4 py-3 bg-[#3e3f3a] text-white rounded-lg border-2 border-[#9E7758] focus:outline-none focus:ring-2 focus:ring-[#9E7758] focus:border-[#9E7758] dark:border-gray-600 dark:text-white dark:focus:ring-[#646560] dark:focus:border-[#646560]"
+                        className="peer w-full px-4 py-3 bg-[#3e3f3a] text-white rounded-lg border-2 border-[#9E7758] focus:outline-none focus:ring-2 focus:ring-[#9E7758] focus:border-[#9E7758]"
                         onChange={(e) => setCarNumber(e.target.value)}
                     />
                     <label
@@ -77,8 +136,12 @@ function Booking() {
                         id="hours"
                         min="1"
                         placeholder=" "
-                        className="peer w-full px-4 py-3 bg-[#3e3f3a] text-white rounded-lg border-2 border-[#9E7758] focus:outline-none focus:ring-2 focus:ring-[#9E7758] focus:border-[#9E7758] dark:border-gray-600 dark:text-white dark:focus:ring-[#646560] dark:focus:border-[#646560]"
-                        onChange={handleHoursChange}
+                        className="peer w-full px-4 py-3 bg-[#3e3f3a] text-white rounded-lg border-2 border-[#9E7758] focus:outline-none focus:ring-2 focus:ring-[#9E7758] focus:border-[#9E7758]"
+                        onChange={(e) => {
+                            const value = parseInt(e.target.value);
+                            setHours(value);
+                            setTotalPrice(value * 100);
+                        }}
                     />
                     <label
                         htmlFor="hours"
@@ -93,20 +156,23 @@ function Booking() {
                     <select
                         value={parkingSpot}
                         onChange={(e) => setParkingSpot(e.target.value)}
-                        className="w-full px-4 py-3 bg-[#3e3f3a] text-white rounded-lg border-2 border-[#9E7758] focus:outline-none focus:ring-2 focus:ring-[#9E7758] focus:border-[#9E7758] dark:border-gray-600 dark:text-white dark:focus:ring-[#646560] dark:focus:border-[#646560]"
+                        className="w-full px-4 py-3 bg-[#3e3f3a] text-white rounded-lg border-2 border-[#9E7758] focus:outline-none focus:ring-2 focus:ring-[#9E7758] focus:border-[#9E7758]"
                     >
-                        <option value="" disabled>Выберите парковочное место</option>
-                        {[...Array(16)].map((_, index) => (
-                            <option key={index} value={index + 1}>
-                                Место №{index + 1}
-                            </option>
-                        ))}
+                        <option value="">Выберите парковочное место</option>
+                        {[...Array(16)].map((_, index) => {
+                            const spotNumber = index + 1;
+                            const isOccupied = occupiedSpots.includes(spotNumber);
+                            return (
+                                <option
+                                    key={spotNumber}
+                                    value={spotNumber}
+                                    disabled={isOccupied}
+                                >
+                                    Место №{spotNumber} {isOccupied ? '(занято)' : ''}
+                                </option>
+                            );
+                        })}
                     </select>
-                    <label
-                        className="absolute left-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-400 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500 peer-focus:text-sm peer-focus:text-[#9E7758] peer-focus:transform peer-focus:-translate-y-5 transition-all duration-200"
-                    >
-                        Выберите место
-                    </label>
                 </div>
 
                 {/* Итоговая стоимость */}
@@ -119,9 +185,12 @@ function Booking() {
                 {/* Кнопка бронирования */}
                 <button
                     type="submit"
-                    className="w-full py-3 px-6 bg-[#9E7758] text-white font-semibold rounded-lg hover:bg-[#6E5A42] transition-all duration-300"
+                    disabled={loading}
+                    className={`w-full py-3 px-6 bg-[#9E7758] text-white font-semibold rounded-lg 
+                        ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#6E5A42]'} 
+                        transition-all duration-300`}
                 >
-                    Подтвердить бронирование
+                    {loading ? 'Бронирование...' : 'Подтвердить бронирование'}
                 </button>
             </form>
 

@@ -7,7 +7,7 @@ import (
 type User struct {
 	ID           int    `json:"id"`
 	Email        string `json:"email"`
-	PasswordHash string `json:"password_hash"`
+	PasswordHash string `json:"password"`
 	AccountType  string `json:"account_type"` // 'user' или 'admin'
 }
 
@@ -16,11 +16,19 @@ type LoginData struct {
 	Password string `json:"password"`
 }
 
-// Создание нового пользователя
-func CreateUser(db *sql.DB, user *User) error {
-	query := "INSERT INTO users (email, password_hash, account_type) VALUES ($1, $2, $3)"
-	_, err := db.Exec(query, user.Email, user.PasswordHash, user.AccountType)
-	return err
+func CreateUser(db *sql.DB, user *User) (int, error) {
+    var id int
+    err := db.QueryRow(`
+        INSERT INTO users (email, password_hash, account_type)
+        VALUES ($1, $2, $3)
+        RETURNING id
+    `, user.Email, user.PasswordHash, user.AccountType).Scan(&id)
+
+    if err != nil {
+        return 0, err
+    }
+
+    return id, nil
 }
 
 // Проверка существующего пользователя по email

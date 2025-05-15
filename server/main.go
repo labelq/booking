@@ -64,6 +64,7 @@ func main() {
 	http.Handle("/api/login", handlers.LoginHandler(db))
 	http.Handle("/api/register", handlers.RegisterHandler(db))
 	http.Handle("/api/booking", middlewares.CheckAuth(handlers.BookParkingSpot(db)))
+	http.Handle("/api/bookings", middlewares.CheckAuth(handlers.GetOccupiedSpots(db)))
 
 	// Создаем и настраиваем CORS middleware
 	corsMiddleware := cors.New(cors.Options{

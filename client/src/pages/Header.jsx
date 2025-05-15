@@ -1,7 +1,49 @@
 import '../App.css'
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from 'react';
 
 function Header() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [user, setUser] = useState(null);
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const checkAuth = () => {
+            const token = localStorage.getItem('authToken');
+            const userStr = localStorage.getItem('user');
+            console.log('Checking auth - Token:', token);
+            console.log('Checking auth - User:', userStr);
+
+            setIsAuthenticated(!!token);
+            if (userStr) {
+                setUser(JSON.parse(userStr));
+            }
+        };
+
+        checkAuth();
+
+        const handleAuthChange = () => {
+            console.log('Auth change event received');
+            checkAuth();
+        };
+
+        window.addEventListener('auth-change', handleAuthChange);
+
+        return () => {
+            window.removeEventListener('auth-change', handleAuthChange);
+        };
+    }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        setIsAuthenticated(false);
+        setUser(null);
+        window.dispatchEvent(new Event('auth-change'));
+        navigate('/');
+    };
+
+
     return (
         <div>
             <header className="bg-[#11120e] fixed top-0 left-0 w-full z-10 shadow-xl backdrop-blur-xl">
@@ -41,34 +83,47 @@ function Header() {
                                             Как добраться?
                                         </Link>
                                     </li>
-                                    <li>
-                                        <Link
-                                            className="text-gray-500 transition hover:text-gray-500/75 dark:text-white dark:hover:text-white/75"
-                                            to="/booking"
-                                        >
-                                            Бронировать
-                                        </Link>
-                                    </li>
+                                    {isAuthenticated && (
+                                        <li>
+                                            <Link
+                                                className="text-gray-500 transition hover:text-gray-500/75 dark:text-white dark:hover:text-white/75"
+                                                to="/booking"
+                                            >
+                                                Бронировать
+                                            </Link>
+                                        </li>
+                                    )}
                                 </ul>
                             </nav>
 
                             <div className="flex items-center gap-4">
                                 <div className="sm:flex sm:gap-4">
-                                    <Link
-                                        className="py-2.5 px-5 bg-[#646560] text-white rounded-lg hover:bg-[#3e3f3a] transition-transform duration-300 hover:scale-105 focus:outline-none"
-                                        to="/login"
-                                    >
-                                        Вход
-                                    </Link>
-
-                                    <div className="hidden sm:flex">
-                                        <Link
+                                    {isAuthenticated ? (
+                                        <button
+                                            onClick={handleLogout}
                                             className="py-2.5 px-5 bg-[#646560] text-white rounded-lg hover:bg-[#3e3f3a] transition-transform duration-300 hover:scale-105 focus:outline-none"
-                                            to="/register"
                                         >
-                                            Регистрация
-                                        </Link>
-                                    </div>
+                                            Выйти
+                                        </button>
+                                    ) : (
+                                        <>
+                                            <Link
+                                                className="py-2.5 px-5 bg-[#646560] text-white rounded-lg hover:bg-[#3e3f3a] transition-transform duration-300 hover:scale-105 focus:outline-none"
+                                                to="/login"
+                                            >
+                                                Вход
+                                            </Link>
+
+                                            <div className="hidden sm:flex">
+                                                <Link
+                                                    className="py-2.5 px-5 bg-[#646560] text-white rounded-lg hover:bg-[#3e3f3a] transition-transform duration-300 hover:scale-105 focus:outline-none"
+                                                    to="/register"
+                                                >
+                                                    Регистрация
+                                                </Link>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div className="block md:hidden">
@@ -81,9 +136,9 @@ function Header() {
                                             fill="none"
                                             viewBox="0 0 24 24"
                                             stroke="currentColor"
-                                            stroke-width="2"
+                                            strokeWidth="2"
                                         >
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
                                         </svg>
                                     </button>
                                 </div>

@@ -46,3 +46,4 @@ func ParseToken(tokenString string) (jwt.MapClaims, error) {
 
 	return claims, nil
 }
+

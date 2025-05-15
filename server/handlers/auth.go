@@ -9,99 +9,102 @@ import (
 	"server/utils"
 )
 
-// Регистрация пользователя
 func RegisterHandler(db *sql.DB) http.HandlerFunc {
-	log.Println("dfhgsfnghn")
-	return func(w http.ResponseWriter, r *http.Request) {
-		var userData models.User
+    return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        var userData models.User
 
-		if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
-			http.Error(w, "Invalid request", http.StatusBadRequest)
-			return
-		}
-		log.Println(r.Body)
-		// Здесь passwordData - это поле, которое приходит от клиента, не PasswordHash
-		password := userData.PasswordHash
+        if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
+            log.Printf("Error decoding request: %v", err)
+            http.Error(w, "Invalid request", http.StatusBadRequest)
+            return
+        }
 
-		// Проверка, существует ли уже пользователь с таким email
-		existingUser, err := models.FindUserByEmail(db, userData.Email)
-		if err != nil && err != sql.ErrNoRows {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
-		if existingUser != nil {
-			http.Error(w, "Email already registered", http.StatusConflict)
-			return
-		}
+        // Получаем пароль до того, как он будет захэширован
+        password := userData.PasswordHash // временно храним пароль
 
-		// Хэшируем пароль перед сохранением
-		hashedPassword, err := utils.HashPassword(password) // Используем Password для хэширования
+        // Хэширование пароля
+        hashedPassword, err := utils.HashPassword(password) // используем исходный пароль
+        if err != nil {
+            log.Printf("Error hashing password: %v", err)
+            http.Error(w, "Could not hash password", http.StatusInternalServerError)
+            return
+        }
+
+        userData.PasswordHash = hashedPassword
+        userData.AccountType = "user"
+
+		// Создаем пользователя и получаем его ID
+		userID, err := models.CreateUser(db, &userData) // Измените CreateUser, чтобы возвращать ID
 		if err != nil {
-			http.Error(w, "Could not hash password", http.StatusInternalServerError)
-			return
-		}
-
-		// Сохраняем хэшированный пароль
-		userData.PasswordHash = hashedPassword
-		userData.AccountType = "user" // По умолчанию 'user', можно менять при регистрации администратора
-
-		// Сохраняем нового пользователя в базе данных
-		err = models.CreateUser(db, &userData)
-		if err != nil {
+			log.Printf("Error creating user: %v", err)
 			http.Error(w, "Could not create user", http.StatusInternalServerError)
 			return
 		}
 
-		// Генерируем JWT токен для нового пользователя
-		token, err := utils.GenerateToken(userData.ID)
+		// Генерируем токен с правильным ID
+		token, err := utils.GenerateToken(userID)
 		if err != nil {
+			log.Printf("Error generating token: %v", err)
 			http.Error(w, "Could not create token", http.StatusInternalServerError)
 			return
 		}
 
-		// Отправляем токен в ответе
-		json.NewEncoder(w).Encode(map[string]string{
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{
 			"token": token,
+			"user": map[string]interface{}{
+				"id":    userID,
+				"email": userData.Email,
+			},
 		})
 	}
 }
 
 func LoginHandler(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var loginData models.LoginData
-		if err := json.NewDecoder(r.Body).Decode(&loginData); err != nil {
-			http.Error(w, "Invalid request", http.StatusBadRequest)
-			return
-		}
+    return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        var loginData models.LoginData
 
-		// Ищем пользователя по email
-		user, err := models.FindUserByEmail(db, loginData.Email)
-		if err != nil {
-			// Пользователь не найден или ошибка в запросе
-			if err == sql.ErrNoRows {
-				http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-			} else {
-				http.Error(w, "Database error", http.StatusInternalServerError)
-			}
-			return
-		}
+        if err := json.NewDecoder(r.Body).Decode(&loginData); err != nil {
+            log.Printf("Login: error decoding request: %v", err)
+            http.Error(w, "Invalid request", http.StatusBadRequest)
+            return
+        }
 
-		// Проверка пароля
-		if !utils.CheckPassword(loginData.Password, user.PasswordHash) {
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-			return
-		}
+        log.Printf("Login attempt for email: %s", loginData.Email)
 
-		// Генерация JWT токена
-		token, err := utils.GenerateToken(user.ID)
-		if err != nil {
-			http.Error(w, "Could not create token", http.StatusInternalServerError)
-			return
-		}
+        user, err := models.FindUserByEmail(db, loginData.Email)
+        if err != nil {
+            log.Printf("Login: error finding user: %v", err)
+            if err == sql.ErrNoRows {
+                http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+            } else {
+                http.Error(w, "Database error", http.StatusInternalServerError)
+            }
+            return
+        }
 
-		// Отправляем токен в ответе
-		json.NewEncoder(w).Encode(map[string]string{
-			"token": token,
-		})
-	}
+        if !utils.CheckPassword(loginData.Password, user.PasswordHash) {
+            log.Printf("Login: invalid password for user: %s", loginData.Email)
+            http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+            return
+        }
+
+        token, err := utils.GenerateToken(user.ID)
+        if err != nil {
+            log.Printf("Login: error generating token: %v", err)
+            http.Error(w, "Could not create token", http.StatusInternalServerError)
+            return
+        }
+
+        log.Printf("Login successful for user: %s", loginData.Email)
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "token": token,
+            "user": map[string]interface{}{
+                "id":    user.ID,
+                "email": user.Email,
+            },
+        })
+    }
 }

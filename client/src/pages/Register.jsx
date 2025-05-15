@@ -24,23 +24,33 @@ function Register() {
             return;
         }
 
-        // Отправляем данные на сервер Go для регистрации
-        const response = await fetch("http://localhost:8080/api/register", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ email, password }),
-        });
+        try {
+            // Отправляем данные на сервер Go для регистрации
+            const response = await fetch("http://localhost:8080/api/register", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, password }),
+            });
 
-        if (response.ok) {
-            // Если регистрация успешна, получаем токен и сохраняем его
-            const data = await response.json();
-            localStorage.setItem("authToken", data.token); // Сохраняем токен
-            navigate("/booking"); // Перенаправляем на страницу бронирования
-        } else {
-            const errorData = await response.json();
-            setMessage(errorData.message || "Ошибка при регистрации");
+            if (response.ok) {
+                // Если регистрация успешна, получаем токен и сохраняем его
+                const data = await response.json();
+                localStorage.setItem("authToken", data.token); // Сохраняем токен
+
+                // Публикуем событие для обновления состояния авторизации
+                window.dispatchEvent(new Event('auth-change'));
+
+                // Перенаправляем на главную страницу вместо страницы бронирования
+                navigate("/");
+            } else {
+                const errorData = await response.json();
+                setMessage(errorData.message || "Ошибка при регистрации");
+            }
+        } catch (error) {
+            setMessage("Ошибка сервера, попробуйте позже");
+            console.error("Registration error:", error);
         }
     };
 

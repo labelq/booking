@@ -11,23 +11,35 @@ function Login() {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Отправляем данные на сервер Go для проверки
-        const response = await fetch("http://localhost:8080/api/login", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ email, password }),
-        });
+        try {
+            const response = await fetch("http://localhost:8080/api/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, password }),
+            });
 
-        if (response.ok) {
-            // Если логин успешен, получаем токен и сохраняем его
-            const data = await response.json();
-            localStorage.setItem("authToken", data.token); // Сохраняем токен
-            navigate("/booking"); // Перенаправляем на страницу бронирования
-        } else {
-            // Если логин не удался
-            setMessage("Неверный логин или пароль");
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem("authToken", data.token);
+                // Также сохраним информацию о пользователе
+                localStorage.setItem("user", JSON.stringify(data.user));
+
+                // Явно создаем новое событие
+                const authEvent = new Event('auth-change');
+                window.dispatchEvent(authEvent);
+
+                console.log('Login successful, token saved');
+                console.log('Auth change event dispatched');
+
+                navigate("/booking");
+            } else {
+                setMessage("Неверный логин или пароль");
+            }
+        } catch (error) {
+            console.error("Login error:", error);
+            setMessage("Произошла ошибка при входе");
         }
     };
 
