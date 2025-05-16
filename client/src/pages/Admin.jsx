@@ -29,10 +29,13 @@ function Admin() {
             });
             if (response.ok) {
                 const data = await response.json();
-                setBookings(data.bookings);
+                setBookings(data.bookings || []); // Изменить строку 32
+            } else {
+                setBookings([]); // Добавить эту строку после строки 32
             }
         } catch (error) {
             console.error('Error fetching bookings:', error);
+            setBookings([]); // Добавить эту строку перед строкой 36
         }
     };
 
@@ -47,14 +50,15 @@ function Admin() {
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Failed to fetch blocked spots:', response.status, errorText);
+                setBlockedSpots([]); // Устанавливаем пустой массив при ошибке
                 return;
             }
 
             const data = await response.json();
-            setBlockedSpots(data.blockedSpots || []);
+            setBlockedSpots(data.blockedSpots || []); // Используем пустой массив если data.blockedSpots равен null
         } catch (error) {
             console.error('Error fetching blocked spots:', error);
-            setBlockedSpots([]);
+            setBlockedSpots([]); // Устанавливаем пустой массив при ошибке
         }
     };
 
@@ -119,10 +123,13 @@ function Admin() {
             });
             if (response.ok) {
                 const data = await response.json();
-                setUsers(data.users);
+                setUsers(data.users || []);
+            } else {
+                setUsers([]);
             }
         } catch (error) {
             console.error('Error fetching users:', error);
+            setUsers([]);
         }
     };
 
@@ -180,7 +187,7 @@ function Admin() {
                         </tr>
                         </thead>
                         <tbody>
-                        {users.map((user) => (
+                        {(users || []).map((user) => (
                             <tr key={user.id} className="border-b border-[#363636]">
                                 <td className="px-4 py-2">{user.id}</td>
                                 <td className="px-4 py-2">{user.email}</td>
@@ -243,7 +250,7 @@ function Admin() {
                 <div className="grid grid-cols-4 gap-4">
                     {[...Array(16)].map((_, index) => {
                         const spotNumber = index + 1;
-                        const isBlocked = blockedSpots.includes(spotNumber);
+                        const isBlocked = (blockedSpots || []).includes(spotNumber);
                         return (
                             <button
                                 key={spotNumber}
