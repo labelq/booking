@@ -12,7 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/gorilla/mux" // Добавляем импорт gorilla/mux
+	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	"github.com/rs/cors"
 )
@@ -71,13 +71,13 @@ func main() {
 	router.Handle("/api/bookings", middlewares.CheckAuth(handlers.GetOccupiedSpots(db))).Methods("GET")
 
 	// Административные маршруты
-	router.HandleFunc("/api/admin/bookings", handlers.GetBookingsHandler(db)).Methods("GET")
-	router.HandleFunc("/api/admin/bookings/{id}", handlers.CancelBookingHandler(db)).Methods("DELETE")
+	router.HandleFunc("/api/admin/bookings", handlers.GetAllBookings(db)).Methods("GET")
+	router.HandleFunc("/api/admin/bookings/{id}", handlers.CancelBooking(db)).Methods("DELETE")
 	router.HandleFunc("/api/admin/blocked-spots", handlers.GetBlockedSpots(db)).Methods("GET")
-	router.HandleFunc("/api/admin/spots/toggle-block", handlers.ToggleSpotBlockHandler(db)).Methods("POST")
+	router.HandleFunc("/api/admin/spots/toggle-block", handlers.ToggleSpotBlock(db)).Methods("POST")
 	router.HandleFunc("/api/admin/users", handlers.GetUsersHandler(db)).Methods("GET")
 	router.HandleFunc("/api/admin/users/{id}/role", handlers.UpdateUserRoleHandler(db)).Methods("PUT")
-	
+
 	// Создаем и настраиваем CORS middleware
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:80", "http://localhost"},
